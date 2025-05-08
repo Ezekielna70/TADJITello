@@ -19,7 +19,7 @@ command_queue = queue.Queue()
 
 latest_boxes          = []
 TRACK_CONF_THRESHOLD = 0.8
-center_margin   = 20       # toleransi horizontal (px)
+center_margin   = 30       # toleransi horizontal (px)
 vertical_margin = 20       # toleransi vertikal (px)
 
 # flags untuk aksi satu-kali
@@ -98,48 +98,58 @@ def yolo_thread(model, drone):
             cx, cy = (x1+x2)//2, (y1+y2)//2
 
             if cls == "Car Toy Behind":
+                # reset flags aksi khusus
                 car_left_triggered = car_right_triggered = False
-                # horizontal
+                # horizontal auto-track
                 if cx < FRAME_W//2 - center_margin:
                     move_needed = "kiri"
                 elif cx > FRAME_W//2 + center_margin:
                     move_needed = "kanan"
-                # vertical
+                # vertical auto-track
                 if cy < TOP_LINE_Y - vertical_margin:
                     move_needed = "maju"
                 elif cy > BOTTOM_LINE_Y + vertical_margin:
                     move_needed = "mundur"
 
-            # **aksi sekuensial untuk Car Toy Left**
+            # aksi sekuensial untuk Car Toy Left
             elif cls == "Car Toy Left" and not car_left_triggered:
-                print("[INFO] Car Toy Left terdeteksi: jalankan sekuens gerakan")
-                # kosongkan antrian dan kunci flag
+                car_left_triggered = True
+                # flush queue
                 while not command_queue.empty():
                     command_queue.get_nowait()
-                car_left_triggered = True
-
-                # 1) geser kanan 50 cm
-                queue_cmd("move_right", 100, "kanan 100cm")
-                time.sleep(3)  # tunggu drone geser selesai
-
-                # 2) maju 30 cm
-                queue_cmd("move_forward", 100, "maju 100cm")
+                # 1) geser kanan 100 cm
+                queue_cmd("move_right", 20, "kanan 100cm")
                 time.sleep(3)
-
+                # 2) maju 100 cm
+                queue_cmd("move_forward", 20, "maju 100cm")
+                time.sleep(3)
                 # 3) rotate kiri 90°
                 queue_cmd("rotate_ccw", 90, "rot kiri 90°")
 
-            # (opsional: Car Toy Right bisa ditambahkan mirip di sini)
+            # aksi sekuensial untuk Car Toy Kanan (Car Toy Right)
+            elif cls == "Car Toy Right" and not car_right_triggered:
+                car_right_triggered = True
+                # flush queue
+                while not command_queue.empty():
+                    command_queue.get_nowait()
+                # 1) geser kiri 100 cm
+                queue_cmd("move_left", 20, "kiri 100cm")
+                time.sleep(3)
+                # 2) maju 100 cm
+                queue_cmd("move_forward", 20, "maju 100cm")
+                time.sleep(3)
+                # 3) rotate kanan 90°
+                queue_cmd("rotate_cw", 90, "rot kanan 90°")
 
-        # kirim perintah auto-move jika berbeda dari sebelumnya
+        # kirim perintah auto-move jika perlu
         if move_needed != prev_move:
             prev_move = move_needed
-            if   move_needed == "kiri":   queue_cmd("move_left", 10, "kiri")
-            elif move_needed == "kanan":  queue_cmd("move_right", 10, "kanan")
-            elif move_needed == "maju":   queue_cmd("move_forward", 10, "maju")
-            elif move_needed == "mundur": queue_cmd("move_back", 10, "mundur")
+            if   move_needed == "kiri":   queue_cmd("move_left", 20, "kiri")
+            elif move_needed == "kanan":  queue_cmd("move_right", 20, "kanan")
+            
+            elif move_needed == "maju":   queue_cmd("move_forward", 20, "maju")
+            elif move_needed == "mundur": queue_cmd("move_back", 20, "mundur")
             else:
-                # diam: hanya update overlay dan kosongkan queue
                 set_last("diam")
                 while not command_queue.empty():
                     command_queue.get_nowait()
@@ -156,10 +166,13 @@ def camera_thread(drone):
             time.sleep(0.01)
             continue
         frame = frame_read.frame
+
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+
         camera_ready_count += 1
         if camera_ready_count >= CAMERA_READY_THRESHOLD and not takeoff_done:
             queue_cmd("takeoff", None, "Takeoff")
-            print("[INFO] Kamera siap, drone takeoff")
             time.sleep(3)
             takeoff_done = True
 
@@ -235,7 +248,6 @@ def main():
     frame_read = drone.get_frame_read()
 
     model = YOLO(r"D:\Kuliah_ITS\Semester_8\TA Kelar Amin\Code\Git\best.pt")
-    # bypass fuse agar model YOLOv8 tetap bekerja
     model.fuse = lambda *a, **k: model
 
     threads = [
