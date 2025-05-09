@@ -50,10 +50,12 @@ def queue_cmd(cmd, arg, label):
     set_last(label)
     command_queue.put((cmd, arg))
 
-# =========== COMMAND THREAD ============
-# =========== COMMAND THREAD ============
+# =========== COMMAND THREAD TANPA FEEDBACK ============
 def command_thread(drone: Tello):
-    global running, response_times, command_log
+    global running
+
+    # kecepatan default (cm/s) untuk semua arah
+    SPEED = 50  
 
     while running:
         try:
@@ -62,67 +64,54 @@ def command_thread(drone: Tello):
             time.sleep(0.01)
             continue
 
-        # rekam waktu sebelum kirim
-        t_start = time.time()
-        try:
-            # kirim perintah dan tunggu response dari drone
-            if   cmd == "takeoff":
-                res = drone.send_control_command("takeoff")
-            elif cmd == "land":
-                res = drone.send_control_command("land")
-                running = False
-            elif cmd == "move_left":
-                res = drone.send_control_command(f"left {arg}")
-            elif cmd == "move_right":
-                res = drone.send_control_command(f"right {arg}")
-            elif cmd == "move_forward":
-                res = drone.send_control_command(f"forward {arg}")
-            elif cmd == "move_back":
-                res = drone.send_control_command(f"back {arg}")
-            elif cmd == "move_up":
-                res = drone.send_control_command(f"up {arg}")
-            elif cmd == "move_down":
-                res = drone.send_control_command(f"down {arg}")
-            elif cmd == "rotate_ccw":
-                res = drone.send_control_command(f"ccw {arg}")
-            elif cmd == "rotate_cw":
-                res = drone.send_control_command(f"cw {arg}")
-            elif cmd == "flip_left":
-                res = drone.send_control_command("flip l")
-            elif cmd == "flip_right":
-                res = drone.send_control_command("flip r")
-            else:
-                res = None
+        # mapping perintah ke kecepatan vx, vy, vz, vr
+        vx = vy = vz = vr = 0
 
-        except Exception as e:
-            res = f"ERROR: {e}"
+        if   cmd == "takeoff":
+            drone.takeoff()
+        # elif cmd == "land":
+        #     drone.land()
+        #     running = False
 
-        # hitung response time
-        t_end   = time.time()
-        elapsed = t_end - t_start
-        response_times.append(elapsed)
+        # elif cmd == "move_left":
+        #     vx = -SPEED
+        # elif cmd == "move_right":
+        #     vx =  SPEED
+        # elif cmd == "move_forward":
+        #     vy =  SPEED
+        # elif cmd == "move_back":
+        #     vy = -SPEED
+        # elif cmd == "move_up":
+        #     vz =  SPEED
+        # elif cmd == "move_down":
+        #     vz = -SPEED
+        # elif cmd == "rotate_ccw":
+        #     vr = -SPEED
+        # elif cmd == "rotate_cw":
+        #     vr =  SPEED
+        # elif cmd == "flip_left":
+        #     drone.flip_left()
+        #     # flip adalah instant command, tidak pakai rc_control
+        #     continue
+        # elif cmd == "flip_right":
+        #     drone.flip_right()
+        #     continue
+        else:
+            # perintah tak dikenal → stop
+            drone.send_rc_control(0,0,0,0)
+            continue
 
-        # simpan ke command_log
-        command_log.append((cmd, arg, elapsed))
-
-        # print seperti biasa
-        response_text = res.strip() if isinstance(res, str) else str(res)
-        print(f"[RT] Command `{cmd}` arg={arg} → response `{response_text}` in {elapsed:.3f} s")
-
-    # setelah loop selesai, cetak rangkuman
-    print("\n=== Rangkuman Command dan Response Time ===")
-    for c, a, e in command_log:
-        arg_str = f" {a}" if a is not None else ""
-        print(f"{c}{arg_str} response {e:.3f}s")
-
-    # lalu statistik ringkas
-    print("\n=== Statistik Response Time ===")
-    if response_times:
-        total = len(response_times)
-        avg   = sum(response_times) / total
-        print(f"Total commands: {total}")
-        print(f"Rata-rata response time: {avg:.3f} s")
-
+        # jika perintah gerak jarak (arg) terdefinisi, eksekusi RC control:
+        if cmd.startswith(("move_","rotate_")) and arg is not None:
+            # kirim kecepatan
+            drone.send_rc_control(vx, vy, vz, vr)
+            # durasi = jarak (cm) / SPEED (cm/s)
+            time.sleep(arg / SPEED)
+            # berhenti
+            drone.send_rc_control(0, 0, 0, 0)
+        else:
+            # untuk takeoff/land sudah dieksekusi, atau perintah lain
+            pass
 
 # =========== YOLO THREAD ============
 def yolo_thread(model, drone):
@@ -239,6 +228,11 @@ def camera_thread(drone):
 
         frame = frame_read.frame
 
+
+        # Resize dan konversi ke RGB
+        smallcv = cv2.resize(frame, (FRAME_W, FRAME_H))
+        rgbcv = cv2.cvtColor(smallcv, cv2.COLOR_BGR2RGB)
+
         # Resize dan konversi ke RGB
         small = cv2.resize(frame, (FRAME_W, FRAME_H))
         rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
@@ -284,6 +278,7 @@ def camera_thread(drone):
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)
 
         # Tampilkan window
+        cv2.imshow("Real Image", rgbcv)
         cv2.imshow("TelloCam", disp)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             running = False
