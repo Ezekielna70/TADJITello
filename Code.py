@@ -174,17 +174,15 @@ def yolo_thread(model, drone):
                     command_queue.get_nowait()
 
 
-                queue_cmd("move_left", 1, "")
+
+                # 1) geser kanan 100 cm
+                queue_cmd("move_right", 50, "kanan 100cm")
                 time.sleep(3)
-                queue_cmd("move_right", 1, "")
-                # # 1) geser kanan 100 cm
-                # queue_cmd("move_right", 20, "kanan 100cm")
-                # time.sleep(3)
-                # # 2) maju 100 cm
-                # queue_cmd("move_forward", 20, "maju 100cm")
-                # time.sleep(3)
-                # # 3) rotate kiri 90°
-                # queue_cmd("rotate_ccw", 90, "rot kiri 90°")
+                # 2) maju 100 cm
+                queue_cmd("move_forward", 50, "maju 100cm")
+                time.sleep(3)
+                # 3) rotate kiri 90°
+                queue_cmd("rotate_ccw", 90, "rot kiri 90°")
 
             # aksi sekuensial untuk Car Toy Kanan (Car Toy Right)
             elif cls == "Car Toy Right" and not car_right_triggered:
@@ -193,10 +191,17 @@ def yolo_thread(model, drone):
                 while not command_queue.empty():
                     command_queue.get_nowait()
 
-                # 1) geser kiri 100 cm
-                queue_cmd("move_left", 1, "")
+
+
+
+                # 1) geser kanan 100 cm
+                queue_cmd("move_right", 50, "kanan 100cm")
                 time.sleep(3)
-                queue_cmd("move_right", 1, "")
+                # 2) maju 100 cm
+                queue_cmd("move_forward", 50, "maju 100cm")
+                time.sleep(3)
+                # 3) rotate kiri 90°
+                queue_cmd("rotate_ccw", 90, "rot kiri 90°")
                 # # 1) geser kiri 100 cm
                 # queue_cmd("move_left", 20, "kiri 100cm")
                 # time.sleep(3)
